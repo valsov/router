@@ -38,7 +38,12 @@ type tree struct {
 	nodes [5]treeNode
 }
 
-func New() tree {
+type routePart struct {
+	route    string
+	wildcard bool
+}
+
+func NewTree() tree {
 	return tree{
 		[5]treeNode{
 			{Content: string(GET), Children: make(map[string]*treeNode), WildCardChildren: []*treeNode{}},
@@ -68,19 +73,26 @@ func (t *tree) Register(method HttpMethod, route string, handler http.Handler) {
 		}
 	}
 
-	// Check wildcard parameters duplication
+	// Flag wildcard parameters and check potential duplication
+	routeMembers := make([]routePart, len(routeSplit))
 	wildcards := make(map[string]struct{})
-	for _, item := range routeSplit {
+	for i, item := range routeSplit {
 		if item[0] != WILDCARD_START_CHAR {
+			routeMembers[i] = routePart{item, false}
 			continue
 		}
 		if _, found := wildcards[item]; found {
 			panic(fmt.Sprintf("[%s] %s found duplicated wildcard parameter name: %s", method, route, item))
 		}
 		wildcards[item] = struct{}{}
+		// Remove '{' & '}'
+		routeMembers[i] = routePart{item[1 : len(item)-1], true}
 	}
 
-	root.Register(routeSplit, 0, handler)
+	err := root.Register(routeMembers, 0, handler)
+	if err != nil {
+		panic(fmt.Sprintf("[%s] %s %v", method, route, err))
+	}
 }
 
 func (t *tree) Find(method HttpMethod, route string) (RouteData, error) {
@@ -133,16 +145,16 @@ type treeNode struct {
 }
 
 // Can panic
-func (node *treeNode) Register(route []string, currentIndex int, handler http.Handler) {
+func (node *treeNode) Register(route []routePart, currentIndex int, handler http.Handler) error {
 	var currentNode *treeNode
 	var isWildcard bool
-	if route[currentIndex][0] != WILDCARD_START_CHAR {
+	if !route[currentIndex].wildcard {
 		// Normal node
-		currentNode = node.Children[route[currentIndex]]
+		currentNode = node.Children[route[currentIndex].route]
 	} else {
 		// Wildcard node
 		for _, wilcardNode := range node.WildCardChildren {
-			if wilcardNode.Content == route[currentIndex] {
+			if wilcardNode.Content == route[currentIndex].route {
 				currentNode = wilcardNode
 				break
 			}
@@ -153,7 +165,7 @@ func (node *treeNode) Register(route []string, currentIndex int, handler http.Ha
 	if currentNode == nil {
 		// New node
 		currentNode = &treeNode{
-			Content:          route[currentIndex],
+			Content:          route[currentIndex].route,
 			Children:         make(map[string]*treeNode),
 			WildCardChildren: []*treeNode{},
 		}
@@ -161,31 +173,31 @@ func (node *treeNode) Register(route []string, currentIndex int, handler http.Ha
 		if isWildcard {
 			node.WildCardChildren = append(node.WildCardChildren, currentNode)
 		} else {
-			node.Children[route[currentIndex]] = currentNode
+			node.Children[route[currentIndex].route] = currentNode
 		}
 
 		if currentIndex == len(route)-1 {
 			// Register handler on final node
-			node.Handler = handler
-			return
+			currentNode.Handler = handler
+			return nil
 		}
 	} else if currentIndex == len(route)-1 {
 		// Last node exists
 		if currentNode.Handler == nil {
 			// Register handler on final node
-			node.Handler = handler
-			return
+			currentNode.Handler = handler
+			return nil
 		}
 
 		// Handler already registered on this node: panic
-		panic(fmt.Sprintf("%s was already registered with another handler on the same HTTP method", route))
+		return errors.New("route was already registered with another handler on the same HTTP method")
 	}
 
-	currentNode.Register(route, currentIndex+1, handler)
+	return currentNode.Register(route, currentIndex+1, handler)
 }
 
 func (node *treeNode) Find(route []string, currentIndex int, urlParams map[string]string) (*treeNode, bool) {
-	if currentIndex == len(route)-1 {
+	if currentIndex == len(route) {
 		// Last index: try find handler
 		if node.Handler != nil {
 			return node, true
