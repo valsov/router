@@ -13,7 +13,7 @@ const (
 	PATCH  HttpMethod = "PATCH"
 	DELETE HttpMethod = "DELETE"
 
-	WILDCARDCHAR byte = '{'
+	WILDCARD_START_CHAR byte = '{'
 )
 
 var (
@@ -32,6 +32,7 @@ type RouteHandler func() // todo: input params and return type
 type RouteData struct {
 	Handler   func()
 	UrlParams map[string]string
+	// todo: handle query params
 }
 
 type tree struct {
@@ -41,35 +42,18 @@ type tree struct {
 func New() tree {
 	return tree{
 		[5]treeNode{
-			{Content: string(GET), Children: []*treeNode{}},
-			{Content: string(POST), Children: []*treeNode{}},
-			{Content: string(PUT), Children: []*treeNode{}},
-			{Content: string(PATCH), Children: []*treeNode{}},
-			{Content: string(DELETE), Children: []*treeNode{}},
+			{Content: string(GET), Children: map[string]*treeNode{}, WildCardChildren: []*treeNode{}},
+			{Content: string(POST), Children: map[string]*treeNode{}, WildCardChildren: []*treeNode{}},
+			{Content: string(PUT), Children: map[string]*treeNode{}, WildCardChildren: []*treeNode{}},
+			{Content: string(PATCH), Children: map[string]*treeNode{}, WildCardChildren: []*treeNode{}},
+			{Content: string(DELETE), Children: map[string]*treeNode{}, WildCardChildren: []*treeNode{}},
 		},
 	}
 }
 
-func (t *tree) GetRootNode(method HttpMethod) (*treeNode, bool) {
-	switch method {
-	case GET:
-		return &t.nodes[0], true
-	case POST:
-		return &t.nodes[1], true
-	case PUT:
-		return &t.nodes[2], true
-	case PATCH:
-		return &t.nodes[3], true
-	case DELETE:
-		return &t.nodes[4], true
-	}
-
-	return nil, false
-}
-
 // Can panic
 func (t *tree) Add(method HttpMethod, route string, handler RouteHandler) {
-	root, found := t.GetRootNode(method)
+	root, found := t.getRootNode(method)
 	if !found {
 		panic(fmt.Sprintf("%s HTTP method is not supported", method))
 	}
@@ -89,7 +73,7 @@ func (t *tree) Add(method HttpMethod, route string, handler RouteHandler) {
 }
 
 func (t *tree) Find(method HttpMethod, route string) (RouteData, error) {
-	root, found := t.GetRootNode(method)
+	root, found := t.getRootNode(method)
 	if !found {
 		return RouteData{}, ErrUnhandledMethod
 	}
@@ -113,25 +97,42 @@ func (t *tree) Find(method HttpMethod, route string) (RouteData, error) {
 	return RouteData{node.Handler, urlParams}, nil
 }
 
+func (t *tree) getRootNode(method HttpMethod) (*treeNode, bool) {
+	switch method {
+	case GET:
+		return &t.nodes[0], true
+	case POST:
+		return &t.nodes[1], true
+	case PUT:
+		return &t.nodes[2], true
+	case PATCH:
+		return &t.nodes[3], true
+	case DELETE:
+		return &t.nodes[4], true
+	}
+
+	return nil, false
+}
+
 type treeNode struct {
-	Content       string
-	Handler       RouteHandler
-	Children      []*treeNode // todo: Can be optimized, + ((??? : can have multiple wildcards name (having different children) ))
-	WildCardChild *treeNode
+	Content          string
+	Handler          RouteHandler
+	Children         map[string]*treeNode
+	WildCardChildren []*treeNode
 }
 
 // Can panic
 func (node *treeNode) Add(route []string, currentIndex int, handler RouteHandler) {
 	// todo: panic on duplicated urlparams
 
-	//wildCard := route[currentIndex][0] == WILDCARDCHAR
+	//wildCard := route[currentIndex][0] == WILDCARD_START_CHAR
 	//if wildCard
 
 }
 
 func (node *treeNode) Find(route []string, currentIndex int, urlParams map[string]string) (*treeNode, bool) {
 	if currentIndex == len(route)-1 {
-		// Arrived at last index, try to find a handler
+		// Last index: try find handler
 		if node.Handler != nil {
 			return node, true
 		} else {
@@ -139,23 +140,24 @@ func (node *treeNode) Find(route []string, currentIndex int, urlParams map[strin
 		}
 	}
 
-	for _, n := range node.Children {
-		if n.Content == route[currentIndex] {
-			foundNode, found := n.Find(route, currentIndex+1, urlParams)
-			if found {
-				return foundNode, true
-			}
-			break
+	// Try find matching children
+	if n, found := node.Children[route[currentIndex]]; found {
+		foundNode, found := n.Find(route, currentIndex+1, urlParams) // Recursive find on matching node
+		if found {
+			return foundNode, true
 		}
 	}
 
-	// Not found in exact children, try wildcard
-	if node.WildCardChild == nil {
-		return nil, false
+	// No matching classic children: try wildcards
+	for _, wildcardNode := range node.WildCardChildren {
+		foundNode, found := wildcardNode.Find(route, currentIndex+1, urlParams) // Recursive find on wildcard node
+		if found {
+			// Populate url parameters
+			urlParams[wildcardNode.Content] = route[currentIndex]
+			return foundNode, true
+		}
 	}
-	// Populate url parameters
-	urlParams[node.WildCardChild.Content] = route[currentIndex]
 
-	// Try find complete path
-	return node.WildCardChild.Find(route, currentIndex+1, urlParams)
+	// Not found
+	return nil, false
 }
