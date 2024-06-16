@@ -111,10 +111,10 @@ func TestFind(t *testing.T) {
 		} else if err != nil {
 			t.Errorf("expected error: %v", err)
 		} else if tc.urlParams != nil {
-			if len(tc.urlParams) != len(routeData.UrlParams) {
-				t.Errorf("got wrong url parameters count. expected=%v, got=%v", len(tc.urlParams), len(routeData.UrlParams))
+			if len(tc.urlParams) != len(routeData.Context.RouteParams) {
+				t.Errorf("got wrong url parameters count. expected=%v, got=%v", len(tc.urlParams), len(routeData.Context.RouteParams))
 			}
-			for paramKey, paramVal := range routeData.UrlParams {
+			for paramKey, paramVal := range routeData.Context.RouteParams {
 				if _, found := tc.urlParams[paramKey]; !found {
 					t.Errorf("url parameter not found: %s", paramKey)
 				} else if paramVal != tc.urlParams[paramKey] {

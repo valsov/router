@@ -29,9 +29,8 @@ var splitFn = func(c rune) bool {
 type HttpMethod string
 
 type RouteData struct {
-	Handler   http.Handler
-	UrlParams map[string]string
-	// todo: handle query params
+	Handler http.Handler
+	Context RequestContext
 }
 
 type tree struct {
@@ -43,8 +42,8 @@ type routePart struct {
 	wildcard bool
 }
 
-func NewTree() tree {
-	return tree{
+func NewTree() *tree {
+	return &tree{
 		[5]treeNode{
 			{Content: string(GET), Children: make(map[string]*treeNode), WildCardChildren: []*treeNode{}},
 			{Content: string(POST), Children: make(map[string]*treeNode), WildCardChildren: []*treeNode{}},
@@ -81,6 +80,8 @@ func (t *tree) Register(method HttpMethod, route string, handler http.Handler) {
 			routeMembers[i] = routePart{item, false}
 			continue
 		}
+
+		// Handle wildcard
 		if _, found := wildcards[item]; found {
 			panic(fmt.Sprintf("[%s] %s found duplicated wildcard parameter name: %s", method, route, item))
 		}
@@ -111,13 +112,13 @@ func (t *tree) Find(method HttpMethod, route string) (RouteData, error) {
 		}
 	}
 
-	urlParams := map[string]string{}
-	node, found := root.Find(routeSplit, 0, urlParams)
+	routeParams := map[string]string{}
+	node, found := root.Find(routeSplit, 0, routeParams)
 	if !found {
 		return RouteData{}, ErrNotFound
 	}
 
-	return RouteData{node.Handler, urlParams}, nil
+	return RouteData{node.Handler, RequestContext{RouteParams: routeParams}}, nil
 }
 
 func (t *tree) GetRootNode(method HttpMethod) (*treeNode, bool) {
@@ -196,7 +197,7 @@ func (node *treeNode) Register(route []routePart, currentIndex int, handler http
 	return currentNode.Register(route, currentIndex+1, handler)
 }
 
-func (node *treeNode) Find(route []string, currentIndex int, urlParams map[string]string) (*treeNode, bool) {
+func (node *treeNode) Find(route []string, currentIndex int, routeParams map[string]string) (*treeNode, bool) {
 	if currentIndex == len(route) {
 		// Last index: try find handler
 		if node.Handler != nil {
@@ -208,7 +209,7 @@ func (node *treeNode) Find(route []string, currentIndex int, urlParams map[strin
 
 	// Try find matching children
 	if n, found := node.Children[route[currentIndex]]; found {
-		foundNode, found := n.Find(route, currentIndex+1, urlParams) // Recursive find on matching node
+		foundNode, found := n.Find(route, currentIndex+1, routeParams) // Recursive find on matching node
 		if found {
 			return foundNode, true
 		}
@@ -216,10 +217,10 @@ func (node *treeNode) Find(route []string, currentIndex int, urlParams map[strin
 
 	// No matching classic children: try wildcards
 	for _, wildcardNode := range node.WildCardChildren {
-		foundNode, found := wildcardNode.Find(route, currentIndex+1, urlParams) // Recursive find on wildcard node
+		foundNode, found := wildcardNode.Find(route, currentIndex+1, routeParams) // Recursive find on wildcard node
 		if found {
 			// Populate url parameters
-			urlParams[wildcardNode.Content] = route[currentIndex]
+			routeParams[wildcardNode.Content] = route[currentIndex]
 			return foundNode, true
 		}
 	}
