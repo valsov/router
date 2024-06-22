@@ -1,10 +1,12 @@
-package router
+package middleware
 
 import "net/http"
 
+// Middleware function, accepting a next http.Handler as parameter
 type Middleware func(http.Handler) http.Handler
 
-func getHandlerChain(handler http.Handler, middleware []Middleware) http.Handler {
+// Produce a `http.Handler` that contains the whole middleware chain (in the given order) and the final http.Handler at the end
+func GetHandlerChain(handler http.Handler, middleware []Middleware) http.Handler {
 	if len(middleware) == 0 {
 		return handler
 	}
@@ -16,11 +18,3 @@ func getHandlerChain(handler http.Handler, middleware []Middleware) http.Handler
 
 	return currentHandler
 }
-
-/*func sample() Middleware {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			next.ServeHTTP(w, r)
-		})
-	}
-}*/

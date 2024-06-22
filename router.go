@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"router/middleware"
 )
 
 // Verify interface compliance
@@ -16,13 +17,13 @@ type requestContextKey string
 
 type HttpRouter struct {
 	tree            *tree
-	middlewareChain []Middleware
+	middlewareChain []middleware.Middleware
 }
 
 func NewHttpRouter() *HttpRouter {
 	return &HttpRouter{
 		tree:            NewTree(),
-		middlewareChain: []Middleware{},
+		middlewareChain: []middleware.Middleware{},
 	}
 }
 
@@ -33,12 +34,12 @@ func (r *HttpRouter) Handle(method HttpMethod, route string, handler http.Handle
 	return r
 }
 
-func (r *HttpRouter) UseMiddleware(middleware Middleware) *HttpRouter {
+func (r *HttpRouter) UseMiddleware(middleware middleware.Middleware) *HttpRouter {
 	r.middlewareChain = append(r.middlewareChain, middleware)
 	return r
 }
 
-func (r *HttpRouter) UseMiddlewares(middleware ...Middleware) *HttpRouter {
+func (r *HttpRouter) UseMiddlewares(middleware ...middleware.Middleware) *HttpRouter {
 	r.middlewareChain = append(r.middlewareChain, middleware...)
 	return r
 }
@@ -73,7 +74,7 @@ func (r *HttpRouter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	*req = *reqWithContext
 
 	// Middleware chain
-	handler := getHandlerChain(routeData.Handler, r.middlewareChain)
+	handler := middleware.GetHandlerChain(routeData.Handler, r.middlewareChain)
 
 	// Request execution
 	handler.ServeHTTP(w, reqWithContext)
