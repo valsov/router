@@ -16,7 +16,7 @@ func (ctx *RequestContext) GetQueryParam(param string) string {
 	return ctx.QueryParams[param]
 }
 
-// Retrieve a parameter value from the request (both route and query are searched)
+// Retrieve a parameter value from the request. Both route and query are searched.
 func (ctx *RequestContext) GetParam(param string) string {
 	routeParam := ctx.GetRouteParam(param)
 	if routeParam != "" {
