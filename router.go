@@ -5,7 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"router/middleware"
+
+	"github.com/valsov/router/middleware"
 )
 
 // Verify interface compliance
