@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"testing"
 )
 
@@ -56,36 +57,42 @@ func TestRegister(t *testing.T) {
 func TestFind(t *testing.T) {
 	testCases := []struct {
 		method      HttpMethod
-		route       string
+		url         *url.URL
 		urlParams   map[string]string
+		queryParams map[string][]string
 		expectedErr error
 	}{
 		{
 			method:      "UNKNOWN_METHOD",
-			route:       "/",
+			url:         getUrl("/"),
 			expectedErr: ErrUnhandledMethod,
 		},
 		{
 			method:      GET,
-			route:       "/notfound",
+			url:         getUrl("/notfound"),
 			expectedErr: ErrNotFound,
 		},
 		{
 			method: GET,
-			route:  "/",
+			url:    getUrl("/"),
 		},
 		{
 			method: GET,
-			route:  "/test1/test2/test3",
+			url:    getUrl("/test1/test2/test3"),
+		},
+		{
+			method:      GET,
+			url:         getUrl("/test1/test2/test3?queryparam=test1&queryparam=test2"),
+			queryParams: map[string][]string{"queryparam": {"test1", "test2"}},
 		},
 		{
 			method:    GET,
-			route:     "/test1/test2/test3/wildvalue2", // Favor non-wildcard routes
+			url:       getUrl("/test1/test2/test3/wildvalue2"), // Favor non-wildcard routes
 			urlParams: map[string]string{"wild2": "wildvalue2"},
 		},
 		{
 			method: GET,
-			route:  "/test1/wildvalue1/test3/wildvalue2",
+			url:    getUrl("/test1/wildvalue1/test3/wildvalue2"),
 			urlParams: map[string]string{
 				"wild1": "wildvalue1",
 				"wild2": "wildvalue2",
@@ -101,7 +108,7 @@ func TestFind(t *testing.T) {
 	tree.Register(GET, "/test1/test2/test3/{wild2}", handler)
 
 	for _, tc := range testCases {
-		routeData, err := tree.Find(tc.method, tc.route)
+		routeData, err := tree.Find(tc.method, tc.url)
 		if tc.expectedErr != nil {
 			if err == nil {
 				t.Errorf("expected error=%v, got none", tc.expectedErr)
@@ -110,19 +117,44 @@ func TestFind(t *testing.T) {
 			}
 		} else if err != nil {
 			t.Errorf("expected error: %v", err)
-		} else if tc.urlParams != nil {
-			if len(tc.urlParams) != len(routeData.Context.RouteParams) {
-				t.Errorf("got wrong url parameters count. expected=%v, got=%v", len(tc.urlParams), len(routeData.Context.RouteParams))
+		} else {
+			if tc.urlParams != nil {
+				if len(tc.urlParams) != len(routeData.Context.RouteParams) {
+					t.Errorf("got wrong url parameters count. expected=%v, got=%v", len(tc.urlParams), len(routeData.Context.RouteParams))
+				}
+				for paramKey, paramVal := range routeData.Context.RouteParams {
+					if _, found := tc.urlParams[paramKey]; !found {
+						t.Errorf("url parameter not found: %s", paramKey)
+					} else if paramVal != tc.urlParams[paramKey] {
+						t.Errorf("url parameter doesn't match the expected (%s). expected=%s, got=%s", paramKey, tc.urlParams[paramKey], paramVal)
+					}
+				}
 			}
-			for paramKey, paramVal := range routeData.Context.RouteParams {
-				if _, found := tc.urlParams[paramKey]; !found {
-					t.Errorf("url parameter not found: %s", paramKey)
-				} else if paramVal != tc.urlParams[paramKey] {
-					t.Errorf("url parameter doesn't match the expected (%s) expected=%s, got=%s", paramKey, tc.urlParams[paramKey], paramVal)
+			if tc.queryParams != nil {
+				if len(tc.queryParams) != len(routeData.Context.QueryParams) {
+					t.Errorf("got wrong query parameters count. expected=%v, got=%v", len(tc.queryParams), len(routeData.Context.QueryParams))
+				}
+				for paramKey, paramVal := range routeData.Context.QueryParams {
+					if _, found := tc.queryParams[paramKey]; !found {
+						t.Errorf("query parameter not found: %s", paramKey)
+					} else if len(paramVal) != len(tc.queryParams[paramKey]) {
+						t.Errorf("query parameter %s count doesn't match the expected. expected=%d, got=%d", paramKey, len(tc.queryParams[paramKey]), len(paramVal))
+					}
+
+					for i := 0; i < len(paramVal); i++ {
+						if paramVal[i] != tc.queryParams[paramKey][i] {
+							t.Errorf("query parameter value doesn't match the expected (%s). expected=%s, got=%s", paramKey, tc.queryParams[paramKey][i], paramVal[i])
+						}
+					}
 				}
 			}
 		}
 	}
+}
+
+func getUrl(route string) *url.URL {
+	result, _ := url.ParseRequestURI(fmt.Sprintf("https://127.0.0.1%s", route))
+	return result
 }
 
 func checkPanic(testFn func(), shouldPanic bool) (err error) {

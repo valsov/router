@@ -58,7 +58,7 @@ func (r *HttpRouter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		method = HttpMethod(req.Method)
 	}
 
-	routeData, err := r.tree.Find(method, req.URL.Path)
+	routeData, err := r.tree.Find(method, req.URL)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			http.NotFound(w, req)

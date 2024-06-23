@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -96,13 +97,13 @@ func (t *tree) Register(method HttpMethod, route string, handler http.Handler) {
 	}
 }
 
-func (t *tree) Find(method HttpMethod, route string) (RouteData, error) {
+func (t *tree) Find(method HttpMethod, url *url.URL) (RouteData, error) {
 	root, found := t.GetRootNode(method)
 	if !found {
 		return RouteData{}, ErrUnhandledMethod
 	}
 
-	routeSplit := strings.FieldsFunc(route, splitFn)
+	routeSplit := strings.FieldsFunc(url.Path, splitFn)
 	if len(routeSplit) == 0 {
 		// Root path
 		if root.Handler != nil {
@@ -118,7 +119,7 @@ func (t *tree) Find(method HttpMethod, route string) (RouteData, error) {
 		return RouteData{}, ErrNotFound
 	}
 
-	return RouteData{node.Handler, RequestContext{RouteParams: routeParams}}, nil
+	return RouteData{node.Handler, RequestContext{routeParams, url.Query()}}, nil
 }
 
 func (t *tree) GetRootNode(method HttpMethod) (*treeNode, bool) {
