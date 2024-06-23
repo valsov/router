@@ -3,6 +3,7 @@ package router
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"router/middleware"
 )
@@ -34,6 +35,11 @@ func (r *HttpRouter) Handle(method HttpMethod, route string, handler http.Handle
 	return r
 }
 
+func (r *HttpRouter) HandleFunc(method HttpMethod, route string, handler http.HandlerFunc) *HttpRouter {
+	r.tree.Register(method, route, handler)
+	return r
+}
+
 func (r *HttpRouter) UseMiddleware(middleware middleware.Middleware) *HttpRouter {
 	r.middlewareChain = append(r.middlewareChain, middleware)
 	return r
@@ -42,11 +48,6 @@ func (r *HttpRouter) UseMiddleware(middleware middleware.Middleware) *HttpRouter
 func (r *HttpRouter) UseMiddlewares(middleware ...middleware.Middleware) *HttpRouter {
 	r.middlewareChain = append(r.middlewareChain, middleware...)
 	return r
-}
-
-// Start HTTP server
-func (r *HttpRouter) Start(address string) error {
-	return http.ListenAndServe(address, r)
 }
 
 func (r *HttpRouter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
@@ -60,9 +61,9 @@ func (r *HttpRouter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	routeData, err := r.tree.Find(method, req.URL.Path)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
-			http.Error(w, "not found", http.StatusNotFound)
+			http.NotFound(w, req)
 		} else {
-			// todo: log
+			panic(fmt.Sprintf("unhandled error finding request handler: %v", err))
 		}
 
 		return
