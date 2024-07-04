@@ -1,7 +1,6 @@
 package router
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -11,11 +10,6 @@ import (
 
 // Verify interface compliance
 var _ http.Handler = &HttpRouter{}
-
-// HTTP request context key
-var contextKey requestContextKey = "request-context"
-
-type requestContextKey string
 
 type HttpRouter struct {
 	tree            *tree
@@ -71,8 +65,7 @@ func (r *HttpRouter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	// Store route data in context
-	ctx := context.WithValue(req.Context(), contextKey, routeData.Context)
-	reqWithContext := req.WithContext(ctx)
+	reqWithContext := newRequestWithContext(req, routeData.Context)
 	*req = *reqWithContext
 
 	// Middleware chain

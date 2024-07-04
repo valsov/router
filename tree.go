@@ -29,9 +29,9 @@ var splitFn = func(c rune) bool {
 
 type HttpMethod string
 
-type RouteData struct {
+type routeData struct {
 	Handler http.Handler
-	Context RequestContext
+	Context requestContext
 }
 
 type tree struct {
@@ -97,29 +97,29 @@ func (t *tree) Register(method HttpMethod, route string, handler http.Handler) {
 	}
 }
 
-func (t *tree) Find(method HttpMethod, url *url.URL) (RouteData, error) {
+func (t *tree) Find(method HttpMethod, url *url.URL) (routeData, error) {
 	root, found := t.GetRootNode(method)
 	if !found {
-		return RouteData{}, ErrUnhandledMethod
+		return routeData{}, ErrUnhandledMethod
 	}
 
 	routeSplit := strings.FieldsFunc(url.Path, splitFn)
 	if len(routeSplit) == 0 {
 		// Root path
 		if root.Handler != nil {
-			return RouteData{Handler: root.Handler}, nil
+			return routeData{Handler: root.Handler}, nil
 		} else {
-			return RouteData{}, ErrNotFound
+			return routeData{}, ErrNotFound
 		}
 	}
 
 	routeParams := map[string]string{}
 	node, found := root.Find(routeSplit, 0, routeParams)
 	if !found {
-		return RouteData{}, ErrNotFound
+		return routeData{}, ErrNotFound
 	}
 
-	return RouteData{node.Handler, RequestContext{routeParams, url.Query()}}, nil
+	return routeData{node.Handler, requestContext{routeParams, url.Query()}}, nil
 }
 
 func (t *tree) GetRootNode(method HttpMethod) (*treeNode, bool) {
